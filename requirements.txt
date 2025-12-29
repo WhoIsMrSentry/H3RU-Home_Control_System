@@ -1,6 +1,7 @@
 fastapi
-uvicorn
+uvicorn[standard]
 pydantic
 opencv-python
 pyserial
 jinja2
+python-dotenv

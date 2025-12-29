@@ -124,6 +124,27 @@ H3RU-Home_Control_System/
 
 If you would like to contribute, please create a pull request or open an issue.
 
+### Modularized Package
+
+The project has been refactored into a modular `h3ru` Python package to make it easier to maintain and run.
+
+- To run the app locally (development):
+
+```bash
+python -m uvicorn h3ru:app --host 0.0.0.0 --port 8001
+```
+
+- Environment variables supported:
+   - `ARDUINO_PORT` — if set, used as serial port (e.g. `COM3` or `/dev/ttyUSB0`).
+   - `SSL_CERTFILE` and `SSL_KEYFILE` — paths to TLS files for `uvicorn`.
+   - `PORT` — alternative port.
+
+- CLI/daemon: use `daemon.py` to launch `uvicorn` using the current Python interpreter.
+
+Notes:
+- Camera access and serial devices depend on the host OS and permissions. On Windows set `ARDUINO_PORT` to the correct COM port. On Linux defaults try `/dev/ttyUSB*` and `/dev/ttyACM*`.
+- Static assets and templates remain in the repository root under `static/` and `templates/` and are mounted by the package at runtime.
+
 ### Licence
 
 This project is licensed under the GNU license.
