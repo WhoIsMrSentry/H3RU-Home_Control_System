@@ -2,13 +2,12 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-
 #define RelayPin 2
-#define DoorbellButtonPin 4  // Kapı zili butonunun bağlı olduğu pin
-#define SLEEP_TIMEOUT 10000  // Ekranın kapanma süresi (milisaniye)
+#define DoorbellButtonPin 4  // Kapı zili butonu
+#define SLEEP_TIMEOUT 10000  // Ekranın kapanma süresi (ms)
+const unsigned long debounceDelay = 50;
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-
 
 const int buttonPins[] = {13, 12, 11, 10, 9, 8, 7, 6, 5};
 const int buttonNumbers[] = {7, 4, 1, 8, 5, 2, 9, 6, 3};
@@ -17,21 +16,12 @@ String userPasswords[] = {"5836", "3636", "1877", "1331", "5665", "7568"};
 String userNames[] = {"Mehmet", "Emir", "Nebihe", "Edhem", "Konuk", "Sülo"};
 
 String enteredPassword = "";
-unsigned long lastButtonPressTime = 0;  // Son tuş basım zamanını takip eder
-bool isScreenOn = true;  // Ekranın açık olup olmadığını takip eder
+unsigned long lastButtonPressTime = 0;
+bool isScreenOn = true;
 
-// Add a variable to store the last state of the doorbell button
+// Debounce değişkenleri
 int lastDoorbellButtonState = HIGH;
-
-// Fonksiyon bildirimi (function declarations)
-bool isValidPassword(String password);
-String getUserByPassword(String password);
-void openDoor();
-void openGarage();
-void sendResultToJetson(String message);
-void displayGreeting(String user, String identifier);
-void sleepScreen();
-void wakeUpScreen();
+unsigned long lastDebounceTime = 0;
 
 void setup() {
     Serial.begin(115200);
@@ -41,11 +31,10 @@ void setup() {
     lcd.print("    HVZ House   ");
     lcd.setCursor(0, 1);
     lcd.print("  Hosgeldiniz!  ");
-    
+
     pinMode(RelayPin, OUTPUT);
-    pinMode(DoorbellButtonPin, INPUT_PULLUP); 
-    digitalWrite(RelayPin, HIGH);
-    
+    digitalWrite(RelayPin, HIGH);  // Röle pasif başlasın
+    pinMode(DoorbellButtonPin, INPUT_PULLUP);
 
     for (int i = 0; i < 9; i++) {
         pinMode(buttonPins[i], INPUT_PULLUP);
@@ -55,12 +44,11 @@ void setup() {
 void loop() {
     unsigned long currentMillis = millis();
 
-    // Eğer belirli bir süre boyunca tuşa basılmamışsa ekranı kapat
+    // Ekranı uyut
     if (isScreenOn && currentMillis - lastButtonPressTime >= SLEEP_TIMEOUT) {
         sleepScreen();
     }
 
-    // Sayı giriş butonlarıyla ekranı uyandırma ve şifre girişi
     bool anyButtonPressed = false;
     for (int i = 0; i < 9; i++) {
         if (digitalRead(buttonPins[i]) == LOW) {
@@ -69,7 +57,7 @@ void loop() {
                 wakeUpScreen();
             }
 
-            lastButtonPressTime = currentMillis;  // Son tuş basma zamanını güncelle
+            lastButtonPressTime = currentMillis;
             String key = String(buttonNumbers[i]);
             enteredPassword += key;
             Serial.print("Entered: ");
@@ -79,7 +67,6 @@ void loop() {
             lcd.setCursor(0, 0);
             lcd.print("    HVZ House   ");
             lcd.setCursor((16 - enteredPassword.length()) / 2, 1);
-            // Şifreyi ekrana yıldız (*) olarak yazdır
             for (int j = 0; j < enteredPassword.length(); j++) {
                 lcd.print("*");
             }
@@ -95,7 +82,7 @@ void loop() {
                     lcd.clear();
                     lcd.setCursor(0, 0);
                     lcd.print("  Garaj Acildi  ");
-                    Serial.println("Garaj Açıldı");              
+                    Serial.println("Garaj Açıldı");
                 } else if (isValidPassword(enteredPassword)) {
                     String user = getUserByPassword(enteredPassword);
                     delay(1000);
@@ -120,42 +107,45 @@ void loop() {
         }
     }
 
-    // Ekran açık kalması gereken sürenin hesaplanması
     if (anyButtonPressed) {
-        lastButtonPressTime = currentMillis;  // Ekranın kapanma süresini sıfırla
+        lastButtonPressTime = currentMillis;
     }
 
-    // Kapı zili butonuna basıldığında
-    int doorbellButtonState = digitalRead(DoorbellButtonPin);
+    // Kapı zili debounce kontrolü
+    int reading = digitalRead(DoorbellButtonPin);
 
-    if (doorbellButtonState != lastDoorbellButtonState) {
-        if (doorbellButtonState == LOW) {
-            // Button just pressed
+    if (reading != lastDoorbellButtonState) {
+        lastDebounceTime = millis();  // durum değişti, zaman damgası al
+    }
+
+    if ((millis() - lastDebounceTime) > debounceDelay) {
+        if (reading == LOW && lastDoorbellButtonState == HIGH) {
+            openDoor();
             lastButtonPressTime = currentMillis;
             if (!isScreenOn) {
                 wakeUpScreen();
             }
-            Serial.println("doorbell");
+            Serial.println("Gate opened");
             lcd.clear();
             lcd.setCursor(0, 0);
-            lcd.print("  Kapi Zili!   ");
+            lcd.print("  Kapi Acildi!  ");
             delay(2000);
             lcd.clear();
             lcd.setCursor(0, 0);
             lcd.print("    HVZ House   ");
         }
-        // Save the current state for next time
-        lastDoorbellButtonState = doorbellButtonState;
     }
 
-    // Seri port üzerinden komut kontrolü
+    lastDoorbellButtonState = reading;
+
+    // Seri port komut kontrolü
     if (Serial.available() > 0) {
         String command = Serial.readStringUntil('\n');
         command.trim();
         if (command == "OPEN_DOOR") {
             openDoor();
         } else if (command == "OPEN_GARAGE") {
-            openGarage();             
+            openGarage();
         }
     }
 }
@@ -190,21 +180,17 @@ void openDoor() {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("  role1 Kapandi ");
-    
 }
 
 void openGarage() {
     Serial.println("openGarage() tetiklendi");
-    
-    // roleyi aktif edip servo motoruna güç ver
-
-    delay(1000);  // Güç vermek için kısa bir gecikme
+    delay(1000);
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("  role2 Acildi  ");
     delay(1000);
     Serial.println("röle2 Açıldı");
-    delay(2000);  // 1 saniye bekle
+    delay(2000);
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("  röle2 Kapandı ");
@@ -217,10 +203,10 @@ void sendResultToJetson(String message) {
 
 void displayGreeting(String user, String identifier) {
     lcd.clear();
-    lcd.setCursor((16 - (8 + user.length())) / 2, 0); // 'Merhaba ' 8 karakter uzunluğundadır.
+    lcd.setCursor((16 - (8 + user.length())) / 2, 0);
     lcd.print("Merhaba ");
     lcd.print(user);
-    
+
     String fullText = "Giris: " + identifier;
     lcd.setCursor((16 - fullText.length()) / 2, 1);
     lcd.print(fullText);
