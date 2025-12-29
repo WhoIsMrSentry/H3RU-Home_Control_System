@@ -25,6 +25,7 @@ unsigned long lastDebounceTime = 0;
 
 void setup() {
     Serial.begin(115200);
+    Serial1.begin(115200); // Initialize RX/TX for Arduino-ESP communication
     lcd.init();
     lcd.backlight();
     lcd.setCursor(0, 0);
@@ -146,6 +147,29 @@ void loop() {
             openDoor();
         } else if (command == "OPEN_GARAGE") {
             openGarage();
+        }
+    }
+
+    // Check for commands from ESP via Serial1
+    if (Serial1.available() > 0) {
+        String espCommand = Serial1.readStringUntil('\n');
+        espCommand.trim();
+        Serial.print("ESP Command received: ");
+        Serial.println(espCommand);
+        if (espCommand == "OPEN_DOOR") {
+            openDoor();
+        } else if (espCommand == "OPEN_GARAGE") {
+            openGarage();
+        } else if (espCommand == "DOORBELL") {
+            // Process doorbell trigger
+            Serial.println("Doorbell triggered");
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("  Kapi Zili!   ");
+            delay(2000);
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("    HVZ House   ");
         }
     }
 }
