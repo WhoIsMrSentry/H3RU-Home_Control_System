@@ -1,21 +1,36 @@
 import subprocess
 import time
 import psutil
+import sys
+import os
+
 
 def start_application():
-    """Start the application."""
-    subprocess.Popen(["/bin/bash", "-c", "cd /home/jetson/Desktop/H3RU/ && Xvfb :99 -screen 0 1024x768x16 & export DISPLAY=:99 && sudo python3 /home/jetson/Desktop/H3RU/app.py"])
+    """Start the application using the current Python executable."""
+    project_root = os.path.abspath(os.path.dirname(__file__))
+    cmd = [sys.executable, '-m', 'uvicorn', 'h3ru:app', '--host', '0.0.0.0', '--port', '8001']
+    # If SSL env vars exist, pass them
+    cert = os.environ.get('SSL_CERTFILE')
+    key = os.environ.get('SSL_KEYFILE')
+    if cert and key:
+        cmd += ['--ssl-certfile', cert, '--ssl-keyfile', key]
+    subprocess.Popen(cmd, cwd=project_root)
+
 
 def is_application_running():
-    """Check if the application is running."""
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-        if 'python3' in proc.info['cmdline'] and 'app.py' in proc.info['cmdline']:
-            return True
+        try:
+            cmdline = proc.info.get('cmdline') or []
+            if any('uvicorn' in part for part in cmdline) and any('h3ru:app' in part for part in cmdline):
+                return True
+        except Exception:
+            continue
     return False
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     start_application()
     while True:
-        time.sleep(600)  # Sleep for 10 minutes
+        time.sleep(600)
         if not is_application_running():
             start_application()
